@@ -88,7 +88,15 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória (
 
 ---
 
-## 5. Arquivos onde as estruturas e funções se encontram
+## 5. Escolhas Arquiteturais
+
+* **Alocação Contígua (`No*`):** A tabela hash utiliza um vetor direto de estruturas em vez de um vetor de ponteiros (`No**`). Isso garante que os nós fiquem vizinhos na memória física, maximizando a localidade de cache da CPU durante a sondagem linear e agilizando a liberação de memória com um único `free`.
+* **Hash 5-Independente ($P = 65537$):** O uso de um polinômio de grau 4 garante o caos matemático necessário para mitigar o problema de agrupamentos da sondagem linear, assegurando tempo médio de $O(1)$. O primo $P$ foi ajustado para ser maior que $\sqrt{M}$ ($65536$), evitando colisões matemáticas prematuras no mapeamento dos clusters.
+* **Controle Estrito do Fator de Carga:** O mecanismo de *doubling* (aos 50% de ocupação) e *halving* (abaixo de 25%) mantém a tabela hash em um tamanho proporcional ao número de elementos práticos ($n$). Isso estabiliza a performance computacional e cumpre rigorosamente o requisito de espaço linear $O(n)$.
+
+---
+
+## 6. Arquivos onde as estruturas e funções se encontram
 
 Para simplificar a compilação e evitar dependências complexas em sistemas de teste, o código-fonte foi centralizado:
 

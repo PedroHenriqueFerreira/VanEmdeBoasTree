@@ -8,7 +8,7 @@
 // Constantes
 
 #define INITIAL_TABLE_SIZE 4 // Tamanho inicial da tabela hash
-#define P 4397 // Número primo para a função de hash
+#define P 65537 // Número primo para a função de hash
 #define W 32 // Número de bits para o universo (2^32)
 
 #define max(a, b) ((a) > (b) ? (a) : (b)) // Macro para obter o máximo entre dois valores
@@ -36,7 +36,7 @@ void IniciarTabela(TabelaHash *T, int32_t tam) {
     T->tabela = (No*) malloc(tam * sizeof(No));
 
     // Inicializa a tabela com chaves -1 (indicando posição vazia) e valores NULL
-    for (int i = 0; i < tam; i++) {
+    for (int32_t i = 0; i < tam; i++) {
         T->tabela[i].chave = -1;
         T->tabela[i].valor = NULL;
         T->tabela[i].deletado = false;
@@ -50,7 +50,7 @@ void IniciarTabela(TabelaHash *T, int32_t tam) {
     T->a5 = (rand() % (P - 2)) + 2;
 }
 
-int MapearChave(TabelaHash *T, int32_t chave) {
+int32_t MapearChave(TabelaHash *T, int32_t chave) {
     uint64_t k = (uint64_t) chave;
     uint64_t soma = T->a5 * k * k * k * k + 
                     T->a4 * k * k * k + 
@@ -62,7 +62,7 @@ int MapearChave(TabelaHash *T, int32_t chave) {
 }
 
 void IncluirChaveInterno(TabelaHash *T, int32_t chave, vEB *valor) {
-    int idx = MapearChave(T, chave);
+    int32_t idx = MapearChave(T, chave);
 
     // Encontra a posição correta para incluir usando sondagem linear
     while (T->tabela[idx].chave != -1 && !T->tabela[idx].deletado && T->tabela[idx].chave != chave) {
@@ -85,7 +85,7 @@ void RedimensionarTabela(TabelaHash *T, int32_t tam) {
     IniciarTabela(T, tam);
     
     // Reinsere os elementos da tabela antiga na nova tabela
-    for (int i = 0; i < tam_velho; i++) {
+    for (int32_t i = 0; i < tam_velho; i++) {
         if (tabela[i].chave != -1 && !tabela[i].deletado) {
             IncluirChaveInterno(T, tabela[i].chave, tabela[i].valor);
         }
@@ -104,12 +104,12 @@ void IncluirChave(TabelaHash *T, int32_t chave, vEB *valor) {
         DobrarTabela(T);
 }
 
-int EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
+int32_t EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
     if (T->tam == 0) 
         return -1;
 
-    int idx = MapearChave(T, chave);
-    int idx_inicial = idx;
+    int32_t idx = MapearChave(T, chave);
+    int32_t idx_inicial = idx;
     
     // Sondagem linear para encontrar a chave
     while (T->tabela[idx].chave != -1) {
@@ -133,7 +133,7 @@ int EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
 
 void DeletarChave(TabelaHash* T, int32_t chave) {
     No* no = NULL;
-    int idx = EncontrarChave(T, chave, &no);
+    int32_t idx = EncontrarChave(T, chave, &no);
 
     if (idx != -1 && no) {
         no->deletado = true;
@@ -330,7 +330,7 @@ void Imprimir(vEB* V) {
     printf("Min: %ld", V->min);
 
     if (V->resumo != NULL) {
-        for (int i = 0; i < (1 << (W >> 1)); i++) {
+        for (int32_t i = 0; i < (1 << (W >> 1)); i++) {
             No* cluster = NULL;
             if (EncontrarChave(&V->clusters, i, &cluster) != -1 && cluster->valor != NULL) {
                 if (cluster->valor->min != INT64_MAX) {
