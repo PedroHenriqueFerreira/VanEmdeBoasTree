@@ -63,14 +63,14 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória (
 * `struct TabelaHash`: Estrutura de endereçamento aberto que gerencia os clusters. Contém o tamanho atual (`tam`), quantidade de itens armazenados (`cont`), o vetor de instâncias `tabela`, e os coeficientes (`a1` a `a5`) utilizados na função matemática de dispersão 5-independente.
 * `struct van_emde_boas` (vEB): A estrutura central. Armazena os valores mínimo e máximo do conjunto (`min` e `max`), a tabela hash de filhos (`clusters`) e um ponteiro para a árvore de agrupamentos não vazios (`resumo`).
 
-### Funções de Tabela Hash (Controle de Espaço Linear)
+### Funções da Tabela Hash
 
 * `IniciarTabela(TabelaHash *T, int32_t tam)`: Aloca o vetor de forma contígua e gera os 5 coeficientes aleatórios necessários para o hash 5-independente.
 * `MapearChave(TabelaHash *T, int32_t chave)`: Função hash 5-independente. Calcula um polinômio modular de grau 4 para garantir espalhamento uniforme e busca em tempo esperado de $O(1)$.
 * `RedimensionarTabela`, `DobrarTabela`, `DividirTabela`: Funções responsáveis pela realocação dinâmica de memória. Dobram o vetor ao ultrapassar 50% de ocupação e cortam pela metade ao cair abaixo de 25%, garantindo a exigência de espaço de memória $O(n)$.
-* `IncluirChave` e `IncluirChaveInterno`: Inserem um novo nó na tabela resolvendo colisões via *sondagem linear*.
+* `IncluirChave` e `IncluirChaveInterno`: Inserem um novo item na tabela resolvendo colisões via sondagem linear.
 * `EncontrarChave`: Realiza a busca de uma chave na tabela.
-* `DeletarChave`: Realiza a remoção lógica (*lazy deletion*) de um cluster sinalizando a flag `deletado`.
+* `DeletarChave`: Realiza a remoção lógica de um cluster sinalizando a flag `deletado`.
 
 ### Funções Auxiliares
 
@@ -93,4 +93,4 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória (
 Para simplificar a compilação e evitar dependências complexas em sistemas de teste, o código-fonte foi centralizado:
 
 * **`main.c`**: Contém todo o código-fonte (estruturas genéricas de Hash, algoritmos da árvore van Emde Boas e o ponto de entrada `main()`). Esse arquivo concentra toda a lógica de tratamento de colisões e gerência de espaço linear, assim como faz a leitura e formatação do arquivo `.txt` recebido por argumento linha por linha (`INC`, `REM`, `SUC`, `PRE`, `IMP`).
-* **`makefile`**: Script responsável pelas diretrizes de automação, permitindo realizar o *build* facilmente no compilador GCC e testar com rapidez os arquivos de entrada e saída.
+* **`makefile`**: Script responsável pela automação, permitindo realizar o *build* facilmente no compilador GCC e testar com rapidez os arquivos de entrada e saída.
