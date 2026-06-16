@@ -6,7 +6,9 @@
 
 // Constantes
 
+#define INITIAL_TABLE_SIZE 4 // Tamanho inicial da tabela hash
 #define P 4397 // Número primo para a função de hash
+#define W 32 // Número de bits para o universo (2^32)
 
 // Tabela Hash
 
@@ -22,12 +24,13 @@ typedef struct {
     uint64_t a1, a2, a3, a4, a5;
 } TabelaHash;
 
-void IniciarTabelaHash(TabelaHash* T, int32_t tam) {
+void IniciarTabela(TabelaHash *T, int32_t tam) {
     T->tam = tam;
     T->cont = 0;
 
     T->tabela = (No*) malloc(tam * sizeof(No));
 
+    // Inicializa a tabela com chaves -1 (indicando posição vazia) e valores NULL
     for (int i = 0; i < tam; i++) {
         T->tabela[i].chave = -1;
         T->tabela[i].valor = NULL;
@@ -42,17 +45,123 @@ void IniciarTabelaHash(TabelaHash* T, int32_t tam) {
     T->a5 = (rand() % (P - 2)) + 2;
 }
 
+int MapearChave(TabelaHash *T, int32_t chave) {
+    uint64_t chave = (uint64_t) chave;
+    uint64_t soma = T->a5 * pow(chave, 4) + T->a4 * pow(chave, 3) + T->a3 * pow(chave, 2) + T->a2 * pow(chave, 1) + T->a1;
+
+    return (soma % P) % T->tam;
+}
+
+void IncluirChaveInterno(TabelaHash *T, int32_t chave, vEB *valor) {
+    int idx = MapearChave(T, chave);
+
+    // Encontra a posição correta para incluir usando sondagem linear
+    while (T->tabela[idx].chave != -1 && !T->tabela[idx].deletado && T->tabela[idx].chave != chave) {
+        idx = (idx + 1) % T->tam;
+    }
+
+    // Insere a chave e o valor na posição encontrada
+    if (T->tabela[idx].chave != chave || T->tabela[idx].deletado) {
+        T->tabela[idx].chave = chave;
+        T->tabela[idx].valor = valor;
+        T->tabela[idx].deletado = false;
+        T->cont++;
+    }
+}
+
+void RedimensionarTabela(TabelaHash *T, int32_t tam) {
+    int32_t tam_velho = T->tam;
+    No* tabela = T->tabela;
+    
+    IniciarTabela(T, tam);
+    
+    // Reinsere os elementos da tabela antiga na nova tabela
+    for (int i = 0; i < tam_velho; i++) {
+        if (tabela[i].chave != -1 && !tabela[i].deletado) {
+            IncluirChaveInterno(T, tabela[i].chave, tabela[i].valor);
+        }
+    }
+
+    free(tabela);
+}
+
+void DobrarTabela(TabelaHash *T) { RedimensionarTabela(T, T->tam * 2); }
+void DividirTabela(TabelaHash *T) { RedimensionarTabela(T, max(T->tam / 2, INITIAL_TABLE_SIZE)); }
+
+void IncluirChave(TabelaHash *T, int32_t chave, vEB *valor) {
+    IncluirChaveInterno(T, chave, valor);
+
+    if (T->cont > T->tam / 2) 
+        DobrarTabela(T);
+}
+
+int EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
+    if (T->tam == 0) 
+        return -1;
+
+    int idx = MapearChave(T, chave);
+    int idx_inicial = idx;
+    
+    // Sondagem linear para encontrar a chave
+    while (T->tabela[idx].chave != -1) {
+        if (T->tabela[idx].chave == chave) {
+            if (T->tabela[idx].deletado) 
+                return -1;
+
+            *valor = &T->tabela[idx];
+
+            return idx;
+        }
+
+        idx = (idx + 1) % T->tam;
+
+        if (idx == idx_inicial) 
+            return -1;
+    }
+
+    return -1;
+}
+
+void DeletarChave(TabelaHash* T, int32_t chave) {
+    No* no = NULL;
+    int idx = EncontrarChave(T, chave, &no);
+
+    if (idx != -1 && no) {
+        no->deletado = true;
+        T->cont--;
+        
+        if (T->cont < (T->tam / 4) && T->tam > INITIAL_TABLE_SIZE)
+            DividirTabela(T);
+    }
+}
+
+// Árvore Van Emde Boas
+
 typedef struct van_emde_boas {
     int64_t min, max;
-    TabelaHash cluster;
+    TabelaHash clusters;
     struct van_emde_boas *resumo;
 } vEB;
 
-// Funções auxiliares para manipular os índices
-int get_c(int x) { return x >> (W >> 1); };
-int get_i(int x) { return x & ((1 << (W >> 1)) - 1); };
-int tupla(int c, int i) { return (c << (W >> 1)) | i; };
-// Função para trocar valores
+vEB* Iniciar() {
+    vEB* V = (vEB*) malloc(sizeof(vEB));
+    
+    V->min = INT64_MAX;
+    V->max = INT64_MIN;
+
+    IniciarTabela(&V->clusters, INITIAL_TABLE_SIZE);
+
+    V->resumo = NULL;
+
+    return V;
+}
+
+// Funções auxiliares para dividir x em <c, i>
+int32_t get_c(int64_t x) { return x >> (W >> 1); };
+int32_t get_i(int64_t x) { return x & ((1 << (W >> 1)) - 1); };
+
+// Função para combinar <c, i> em x
+int64_t tupla(int32_t c, int32_t i) { return ((int64_t) c << (W >> 1)) | i; };
 
 int Sucessor(vEB *V, int x) {
     int i = get_i(x), c = get_c(x); // Não estava no pseudo-código
@@ -67,25 +176,66 @@ int Sucessor(vEB *V, int x) {
     return tupla(c, V->cluster[c]->min);
 }
 
-void Incluir(vEB *V, int x) {
-    int i = get_i(x), c = get_c(x); // Não estava no pseudo-código
+int64_t Sucessor(vEB* V, int64_t x) {
+    if (x < V->min) 
+        return V->min;
 
-    if (V->min == NULO) 
-        V->min = V->max = x;
-    else {
-        if (x < V->min) {
-            int temp = V->min; V->min = x; x = temp; // Troca x <-> V->min
+    if (x >= V->max) 
+        return INT64_MAX;
+
+    int32_t c = get_c(x), i = get_i(x);
+
+    No* clusterNode = NULL;
+    if (EncontrarChave(&V->clusters, c, &clusterNode) != -1) {
+        if (i < clusterNode->valor->max)
+            return tupla(c, Sucessor(clusterNode->valor, i));
+    }
+
+    if (V->resumo != NULL) {
+        int64_t j = Sucessor(V->resumo, c);
+        if (j != INT64_MAX) {
+            No* nextClusterNode = NULL;
+            hashFind(&V->clusters, (int32_t) j, &nextClusterNode);
+
+            return tupla((int32_t) j, (int32_t) nextClusterNode->valor->min);
         }
-        
-        if (x > V->max)
+    }
+
+    return INT64_MAX;
+}
+
+void Incluir(vEB* V, int64_t x) {
+    // Se x já está presente, não faz nada (não estava no pseudo-código)
+    if (V->min == x || V->max == x) 
+        return;
+
+    if (V->min > V->max) { // Equivalente a "se V->min == NULO" no pseudo-código
+        V->min = V->max = x;
+    } else {
+        if (x < V->min) {
+            int64_t temp = x; x = V->min; V->min = temp; // Troca x <-> V->min
+        }
+    
+        if (x > V->max) 
             V->max = x;
-
-        // 
-
-        if (V->cluster[c]->min == NULO) 
+    
+        int32_t c = get_c(x), i = get_i(x);
+    
+        // Adiciona a chave c na tabela de clusters se ainda não existir
+        No* cluster = NULL;
+        if (EncontrarChave(&V->clusters, c, &cluster) == -1) {
+            IncluirChave(&V->clusters, c, Iniciar());
+            EncontrarChave(&V->clusters, c, &cluster);
+        }
+    
+        if (cluster->valor->min > cluster->valor->max) { // "se V->cluster[c]->min == NULO" no pseudo-código
+            if (V->resumo == NULL)
+                V->resumo = Iniciar();
+            
             Incluir(V->resumo, c);
-        
-        Incluir(V->cluster[c], i);
+        }
+
+        Incluir(cluster->valor, i);
     }
 }
 

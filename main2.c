@@ -6,6 +6,9 @@
 #include <math.h>
 #include <time.h>
 
+//  10100110000001000
+// 1 0100110000001000
+
 #define INITIAL_SIZE 4
 #define P 4397 // Número primo para a função de hash
 #define MSQRT 65536 // Raiz quadrada do universo 2^32
@@ -40,6 +43,7 @@ void hashInsertInternal(HashTable* ht, int32_t key, vEBTree* ptr);
 int32_t hashInsert(HashTable* ht, int32_t key, vEBTree* tree);
 int hashFind(HashTable* ht, int32_t key, Node** outNode);
 int32_t hashDelete(HashTable* ht, int32_t key);
+
 vEBTree* createVEBTree();
 int64_t vEBInsert(vEBTree* tree, int64_t x);
 int64_t vEBSuccessor(vEBTree* tree, int64_t x);
