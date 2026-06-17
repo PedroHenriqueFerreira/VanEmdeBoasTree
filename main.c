@@ -11,16 +11,14 @@
 #define P 65537 // Número primo para a função de hash
 #define W 32 // Número de bits para o universo (2^32)
 
-#define max(a, b) ((a) > (b) ? (a) : (b)) // Macro para obter o máximo entre dois valores
-
 typedef struct van_emde_boas vEB;
 
-// Tabela Hash
+// -------------- Tabela Hash --------------
 
 typedef struct {
     int32_t chave;
     vEB *valor; 
-    bool deletado;
+    bool ativo;
 } No;
 
 typedef struct {
@@ -39,7 +37,7 @@ void IniciarTabela(TabelaHash *T, int32_t tam) {
     for (int32_t i = 0; i < tam; i++) {
         T->tabela[i].chave = -1;
         T->tabela[i].valor = NULL;
-        T->tabela[i].deletado = false;
+        T->tabela[i].ativo = true;
     }
     
     // Coeficientes aleatórios (entre 2 e P - 1) para o hash 5-independente
@@ -65,15 +63,15 @@ void IncluirChaveInterno(TabelaHash *T, int32_t chave, vEB *valor) {
     int32_t idx = MapearChave(T, chave);
 
     // Encontra a posição correta para incluir usando sondagem linear
-    while (T->tabela[idx].chave != -1 && !T->tabela[idx].deletado && T->tabela[idx].chave != chave) {
+    while (T->tabela[idx].chave != -1 && T->tabela[idx].ativo && T->tabela[idx].chave != chave) {
         idx = (idx + 1) % T->tam;
     }
 
     // Insere a chave e o valor na posição encontrada
-    if (T->tabela[idx].chave != chave || T->tabela[idx].deletado) {
+    if (T->tabela[idx].chave != chave || !T->tabela[idx].ativo) {
         T->tabela[idx].chave = chave;
         T->tabela[idx].valor = valor;
-        T->tabela[idx].deletado = false;
+        T->tabela[idx].ativo = true;
         T->cont++;
     }
 }
@@ -86,7 +84,7 @@ void RedimensionarTabela(TabelaHash *T, int32_t tam) {
     
     // Reinsere os elementos da tabela antiga na nova tabela
     for (int32_t i = 0; i < tam_velho; i++) {
-        if (tabela[i].chave != -1 && !tabela[i].deletado) {
+        if (tabela[i].chave != -1 && tabela[i].ativo) {
             IncluirChaveInterno(T, tabela[i].chave, tabela[i].valor);
         }
     }
@@ -94,8 +92,13 @@ void RedimensionarTabela(TabelaHash *T, int32_t tam) {
     free(tabela);
 }
 
-void DobrarTabela(TabelaHash *T) { RedimensionarTabela(T, T->tam * 2); }
-void DividirTabela(TabelaHash *T) { RedimensionarTabela(T, max(T->tam / 2, INITIAL_TABLE_SIZE)); }
+void DobrarTabela(TabelaHash *T) { 
+    RedimensionarTabela(T, T->tam * 2); 
+}
+
+void DividirTabela(TabelaHash *T) { 
+    RedimensionarTabela(T, T->tam / 2 > INITIAL_TABLE_SIZE ? T->tam / 2 : INITIAL_TABLE_SIZE); 
+}
 
 void IncluirChave(TabelaHash *T, int32_t chave, vEB *valor) {
     IncluirChaveInterno(T, chave, valor);
@@ -104,7 +107,7 @@ void IncluirChave(TabelaHash *T, int32_t chave, vEB *valor) {
         DobrarTabela(T);
 }
 
-int32_t EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
+int32_t EncontrarChave(TabelaHash *T, unsigned int chave, No **valor) {
     if (T->tam == 0) 
         return -1;
 
@@ -114,7 +117,7 @@ int32_t EncontrarChave(TabelaHash *T, int32_t chave, No **valor) {
     // Sondagem linear para encontrar a chave
     while (T->tabela[idx].chave != -1) {
         if (T->tabela[idx].chave == chave) {
-            if (T->tabela[idx].deletado) 
+            if (!T->tabela[idx].ativo) 
                 return -1;
 
             *valor = &T->tabela[idx];
@@ -136,7 +139,7 @@ void DeletarChave(TabelaHash* T, int32_t chave) {
     int32_t idx = EncontrarChave(T, chave, &no);
 
     if (idx != -1 && no) {
-        no->deletado = true;
+        no->ativo = false;
         T->cont--;
         
         if (T->cont < (T->tam / 4) && T->tam > INITIAL_TABLE_SIZE)
@@ -147,55 +150,57 @@ void DeletarChave(TabelaHash* T, int32_t chave) {
 // Árvore Van Emde Boas
 
 struct van_emde_boas {
-    int64_t min, max;
-    TabelaHash clusters;
+    unsigned int min, max;
+    bool vazio;
+    TabelaHash *clusters;
     struct van_emde_boas *resumo;
 };
 
-vEB* Iniciar() {
+vEB* Iniciar(int w) {
     vEB* V = (vEB*) malloc(sizeof(vEB));
     
-    V->min = INT64_MAX;
-    V->max = INT64_MIN;
-
-    IniciarTabela(&V->clusters, INITIAL_TABLE_SIZE);
-
+    V->vazio = true;
     V->resumo = NULL;
+
+    if (w > 1)
+        IniciarTabela(V->clusters, INITIAL_TABLE_SIZE);
 
     return V;
 }
 
 // Funções auxiliares para dividir x em <c, i>
-int32_t get_c(int64_t x) { return x >> (W >> 1); };
-int32_t get_i(int64_t x) { return x & ((1 << (W >> 1)) - 1); };
+unsigned int get_c(unsigned int x, int w) { return x >> (w >> 1); };
+unsigned int get_i(unsigned int x, int w) { return x & ((1 << (w >> 1)) - 1); };
 
 // Função para combinar <c, i> em x
-int64_t tupla(int64_t c, int64_t i) { return (c << (W >> 1)) | i; };
+unsigned int tupla(unsigned int c, unsigned int i, int w) { return (c << (w >> 1)) | i; };
 
-int64_t Sucessor(vEB* V, int64_t x) {
-    if (x < V->min) 
-        return V->min;
+// Retorna true se encontrou sucessor, false caso contrário (não estava no pseudo-código)
+bool Sucessor(vEB* V, unsigned int x, int w, unsigned int *saida) {
+    if (x < V->min) {
+        *saida = V->min; return true;
+    }
 
     // Não estava no pseudo-código
     if (x >= V->max) 
-        return INT64_MAX;
+        return false;
 
-    int32_t c = get_c(x), i = get_i(x);
+    int32_t c = get_c(x, w), i = get_i(x, w);
 
     No* cluster = NULL;
-    if (EncontrarChave(&V->clusters, c, &cluster) != -1) {
+    if (EncontrarChave(V->clusters, c, &cluster) != -1) { // Encontra o cluster de c
         if (i < cluster->valor->max)
-            return tupla(c, Sucessor(cluster->valor, i));
+            return tupla(c, Sucessor(cluster->valor, i, w >> 1, saida), w);
     }
 
     if (V->resumo != NULL) {
-        int64_t c_ = Sucessor(V->resumo, c);
+        int64_t c_ = Sucessor(V->resumo, c, w >> 1);
 
         if (c_ != INT64_MAX) {
             cluster = NULL;
-            EncontrarChave(&V->clusters, c_, &cluster);
+            EncontrarChave(V->clusters, c_, &cluster);
     
-            return tupla(c_, cluster->valor->min);
+            return tupla(c_, cluster->valor->min, w);
         }
     }
 
@@ -203,26 +208,26 @@ int64_t Sucessor(vEB* V, int64_t x) {
 }
 
 // Simétrico ao Sucessor
-int64_t Predecessor(vEB* V, int64_t x) {
+int64_t Predecessor(vEB* V, unsigned int x, int w) {
     if (x > V->max) 
         return V->max;
 
     if (x <= V->min) 
         return INT64_MIN;
 
-    int32_t c = get_c(x), i = get_i(x);
+    int32_t c = get_c(x, w), i = get_i(x, w);
 
     No* cluster = NULL;
-    if (EncontrarChave(&V->clusters, c, &cluster) != -1) {
+    if (EncontrarChave(V->clusters, c, &cluster) != -1) {
         if (i > cluster->valor->min)
-            return tupla(c, Predecessor(cluster->valor, i));
+            return tupla(c, Predecessor(cluster->valor, i, w >> 1), w);
     }
 
     if (V->resumo != NULL) {
-        int64_t c_ = Predecessor(V->resumo, c);
+        int64_t c_ = Predecessor(V->resumo, c, w >> 1);
         if (c_ != INT64_MIN) {
             cluster = NULL;
-            EncontrarChave(&V->clusters, c_, &cluster);
+            EncontrarChave(V->clusters, c_, &cluster);
 
             return tupla(c_, cluster->valor->max);
         }
@@ -234,95 +239,91 @@ int64_t Predecessor(vEB* V, int64_t x) {
     return INT64_MIN;
 }
 
-void Incluir(vEB* V, int64_t x) {
+void Incluir(vEB* V, unsigned int x, int w) {
     // Se x já está presente, não faz nada (não estava no pseudo-código)
-    if (V->min == x || V->max == x) 
+    if (!V->vazio && (V->min == x || V->max == x)) 
         return;
 
-    if (V->min > V->max) { // Equivalente a "se V->min == NULO" no pseudo-código
-        V->min = V->max = x;
-    } else {
+    if (V->vazio) { // Equivalente a "se V->min == NULO" no pseudo-código
+        V->min = V->max = x; V->vazio = false;
+    } else {    
         if (x < V->min) {
-            int64_t temp = x; x = V->min; V->min = temp; // Troca x <-> V->min
+            unsigned int temp = x; x = V->min; V->min = temp; // Troca x <-> V->min
         }
     
         if (x > V->max) 
             V->max = x;
     
-        int32_t c = get_c(x), i = get_i(x);
-    
+        int c = get_c(x, w), i = get_i(x, w); // Divide x em <c, i>
+
         // Adiciona a chave c na tabela de clusters se ainda não existir
         No* cluster = NULL;
-        if (EncontrarChave(&V->clusters, c, &cluster) == -1) {
-            IncluirChave(&V->clusters, c, Iniciar());
-            EncontrarChave(&V->clusters, c, &cluster);
+        if (EncontrarChave(V->clusters, c, &cluster) == -1) {
+            IncluirChave(&V->clusters, c, Iniciar(w >> 1));
+            EncontrarChave(V->clusters, c, &cluster);
         }
     
-        if (cluster->valor->min > cluster->valor->max) { // "se V->cluster[c]->min == NULO" no pseudo-código
-            if (V->resumo == NULL)
-                V->resumo = Iniciar();
-            
-            Incluir(V->resumo, c);
+        if (w > 1) { // Se w = 1, só pode conter no máximo 1 elemento (não estava no pseudo-código)
+            if (cluster->valor->vazio) { // "se V->cluster[c]->min == NULO" no pseudo-código
+                if (V->resumo == NULL)
+                    V->resumo = Iniciar(w >> 1);
+                
+                Incluir(V->resumo, c, w >> 1);
+            }
+    
+            Incluir(cluster->valor, i, w >> 1);
         }
-
-        Incluir(cluster->valor, i);
     }
 }
 
-void Remover(vEB* V, int64_t x) {
-    // Caso só tenha um elemento, e seja ele x, a árvore fica vazia
-    if (x == V->min && V->min == V->max) {
-        V->min = INT64_MAX;
-        V->max = INT64_MIN;
-
+void Remover(vEB* V, unsigned int x, int w) {
+    // Se a árvore estiver vazia, não faz nada (não estava no pseudo-código)
+    if (V->vazio) 
         return;
-    }
+
+    unsigned int c = get_c(x, w), i = get_i(x, w); // Divide x em <c, i>
 
     if (x == V->min) {
-        if (V->resumo == NULL || V->resumo->min == INT64_MAX) {
-            V->min = INT64_MAX;
-            V->max = INT64_MIN;
-
-            return;
+        if (V->resumo == NULL || V->resumo->vazio) { // "se V->resumo->min == NULO" no pseudo-código
+            V->vazio = true; return;
         }
 
-        int32_t c = V->resumo->min;
+        c = V->resumo->min;
 
         No* cluster = NULL;
-        EncontrarChave(&V->clusters, c, &cluster);
+        EncontrarChave(V->clusters, c, &cluster);
 
-        x = V->min = tupla(c, cluster->valor->min);
+        i = cluster->valor->min;
+
+        x = V->min = tupla(c, i, w);
     }
 
-    int32_t c = get_c(x), i = get_i(x);
-
     No* cluster = NULL;
-    if (EncontrarChave(&V->clusters, c, &cluster) != -1) {
-        Remover(cluster->valor, i);
+    if (EncontrarChave(V->clusters, c, &cluster) != -1) {
+        Remover(cluster->valor, i, w >> 1);
 
-        if (cluster->valor->min == INT64_MAX) {
-            DeletarChave(&V->clusters, c);
+        if (cluster->valor->vazio) {
+            DeletarChave(V->clusters, c);
 
-            if (V->resumo != NULL) {
-                Remover(V->resumo, c);
-            }
+            if (V->resumo != NULL)
+                Remover(V->resumo, c, w >> 1);
         }
 
-        if (x == V->max) {
-            if (V->resumo == NULL || V->resumo->min == INT64_MAX) {
-                V->max = V->min;
-            } else {
-                int32_t c_ = V->resumo->max;
-                cluster = NULL;
-                EncontrarChave(&V->clusters, c_, &cluster);
+        if (V->resumo == NULL || V->resumo->vazio) { // "se V->resumo->min == NULO" no pseudo-código
+            V->max = V->min;
+        } else {
+            unsigned int c_ = V->resumo->max;
 
-                V->max = tupla(c_, cluster->valor->max);
-            }
+            // Encontra o cluster de c_ para atualizar o max de V
+            cluster = NULL;
+            EncontrarChave(V->clusters, c_, &cluster);
+
+            V->max = tupla(c_, cluster->valor->max, w);    
         }
     }
 }
 
-void Imprimir(vEB* V) {
+void Imprimir(vEB* V, int w) {
     // Caso a árvore esteja vazia, não imprime nada
     if (V->min == INT64_MAX && V->max == INT64_MIN)
         return;
@@ -332,16 +333,16 @@ void Imprimir(vEB* V) {
     if (V->resumo != NULL) {
         for (int32_t i = 0; i < (1 << (W >> 1)); i++) {
             No* cluster = NULL;
-            if (EncontrarChave(&V->clusters, i, &cluster) != -1 && cluster->valor != NULL) {
+            if (EncontrarChave(V->clusters, i, &cluster) != -1 && cluster->valor != NULL) {
                 if (cluster->valor->min != INT64_MAX) {
                     int64_t curr = cluster->valor->min;
                     printf(", C[%d]: %ld", i, curr);
                     
-                    int64_t proximo = Sucessor(cluster->valor, curr);
+                    int64_t proximo = Sucessor(cluster->valor, curr, w >> 1);
 
                     while (proximo != INT64_MAX) {
                         printf(", %ld", proximo);
-                        proximo = Sucessor(cluster->valor, proximo);
+                        proximo = Sucessor(cluster->valor, proximo, w >> 1);
                     }
                 }
             }
@@ -365,18 +366,18 @@ int main(int argc, char *argv[]) {
     }
 
     srand(time(NULL));
-    vEB* V = Iniciar();
+    vEB* V = Iniciar(W);
 
     char tag[4]; int64_t a;
     while (fscanf(arquivo, "%s %ld", tag, &a) >= 1) { // a será opcional
         if (strcmp(tag, "INC") == 0) {
-            Incluir(V, a);
+            Incluir(V, a, W);
         } else if (strcmp(tag, "REM") == 0) {
-            Remover(V, a);
+            Remover(V, a, W);
         } else if (strcmp(tag, "SUC") == 0) {
             printf("SUC %ld\n", a);
 
-            int64_t suc = Sucessor(V, a);
+            int64_t suc = Sucessor(V, a, W);
             
             if (suc == INT64_MAX) {
                 printf("+INF\n");
@@ -386,7 +387,7 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(tag, "PRE") == 0) {
             printf("PRE %ld\n", a);
 
-            int64_t pre = Predecessor(V, a);
+            int64_t pre = Predecessor(V, a, W);
 
             if (pre == INT64_MIN) {
                 printf("-INF\n");
@@ -396,7 +397,7 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(tag, "IMP") == 0) {
             printf("IMP\n");
             
-            Imprimir(V);
+            Imprimir(V, W);
         } else {
             // fprintf(stderr, "Tag inválida: %s\n", tag);
             // return 1;
