@@ -95,6 +95,7 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória e
 * **Alocação Contígua (`No*`):** A tabela hash utiliza um vetor direto de estruturas em vez de um vetor de ponteiros (`No`). Isso garante que os nós fiquem vizinhos na memória, maximizando a localidade de cache da CPU durante a sondagem linear e agilizando a liberação de memória com um único `free`.
 * **Hash 5-Independente ($P = 65537$):** O uso de um polinômio de grau 4 garante o caos matemático necessário para mitigar o problema de agrupamentos da sondagem linear, assegurando tempo médio constante. O primo foi ajustado para ser maior que 65536, evitando colisões matemáticas prematuras no mapeamento dos clusters.
 * **uint32_t para Valores e Índices:** A escolha de `uint32_t` para representar os valores e índices foi feita para garantir compatibilidade e eficiência em sistemas de 32 bits, além de que o sinal não é necessário para a representação dos dados.
+* **Impressao de Árvore Vazia:** Quando a árvore vEB estiver vazia, o programa imprime "\n" para indicar claramente a ausência de elementos, em vez de não imprimir nada, facilitando a leitura e interpretação dos resultados.
 
 ---
 

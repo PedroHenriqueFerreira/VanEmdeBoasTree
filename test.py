@@ -18,7 +18,7 @@ for i in range(SIZE):
         entrada += f"INC {x}\n"
         valores.add(x)
     elif op == 'REM':
-        remover_valor_existente = True
+        remover_valor_existente = choice([True, False])
         if remover_valor_existente and valores:
             x = choice(list(valores))
             entrada += f"REM {x}\n"

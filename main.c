@@ -328,7 +328,7 @@ void IncluirVEB(vEB* V, uint32_t x, uint32_t w) {
 
             return;
         }
-    } 
+    }
 
     if (V->vazio) { // Equivalente a "se V->min == NULO" no pseudo-código
         V->min = V->max = x; V->vazio = false;
@@ -470,28 +470,26 @@ int main(int argc, char *argv[]) {
 
     char tag[4]; uint32_t a;
     while (fscanf(arquivo, "%s %u", tag, &a) >= 1) { // a será opcional
-        if (strcmp(tag, "INC") == 0) {
+        if (strcmp(tag, "INC") == 0)
             IncluirVEB(V, a, W);
-        } else if (strcmp(tag, "REM") == 0) {
+        else if (strcmp(tag, "REM") == 0)
             RemoverVEB(V, a, W);
-        } else if (strcmp(tag, "SUC") == 0) {
+        else if (strcmp(tag, "SUC") == 0) {
             printf("SUC %u\n", a);
 
             uint32_t suc;
-            if (SucessorVEB(V, a, W, &suc)) {
+            if (SucessorVEB(V, a, W, &suc))
                 printf("%u\n", suc);
-            } else {
+            else
                 printf("+INF\n");
-            }
         } else if (strcmp(tag, "PRE") == 0) {
             printf("PRE %u\n", a);
 
             uint32_t pre;
-            if (PredecessorVEB(V, a, W, &pre)) {
+            if (PredecessorVEB(V, a, W, &pre))
                 printf("%u\n", pre);
-            } else {
+            else
                 printf("-INF\n");
-            }
         } else if (strcmp(tag, "IMP") == 0) {
             printf("IMP\n");
             
