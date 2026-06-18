@@ -7,7 +7,7 @@
 
 // Constantes
 #define INITIAL_TABLE_SIZE 4 // Tamanho inicial da tabela hash
-#define P 65537 // Número primo para a função de hash
+#define P 65537 // Número primo para a função de hash (maior que 2^16)
 #define W 32 // Número de bits para o universo (2^32)
 
 typedef struct van_emde_boas vEB;
@@ -51,13 +51,16 @@ void IniciarTabela(TabelaHash *T, uint32_t tam) {
 // Função de hash 5-independente para mapear a chave ao índice da tabela
 uint32_t MapearChave(TabelaHash *T, uint32_t chave) {
     uint64_t k = (uint64_t) chave;
-    uint64_t soma = T->a5 * k * k * k * k + 
-                    T->a4 * k * k * k + 
-                    T->a3 * k * k + 
-                    T->a2 * k + 
-                    T->a1;
+    uint64_t soma = T->a5;
 
-    return (soma % P) % T->tam;
+    soma = (soma * k + T->a4) % P; 
+    soma = (soma * k + T->a3) % P; 
+    soma = (soma * k + T->a2) % P; 
+    soma = (soma * k + T->a1) % P;
+
+    // soma = k^4 * a1 + k^3 * a2 + k^2 * a3 + k^1 * a4 + a5 (mod P)
+
+    return (uint32_t) (soma % T->tam);
 }
 
 // Função interna para incluir chave e valor sem redimensionar a tabela
@@ -164,7 +167,7 @@ struct van_emde_boas {
 };
 
 // Função para inicializar uma árvore van Emde Boas de universo 2^w
-vEB* Iniciar(uint32_t w) {
+vEB* AlocarVEB(uint32_t w) {
     vEB* V = (vEB*) malloc(sizeof(vEB));
     
     V->vazio = true;
@@ -179,22 +182,46 @@ vEB* Iniciar(uint32_t w) {
     return V;
 }
 
+// Função para liberar a memória alocada pela árvore van Emde Boas
+void LiberarVEB(vEB* V) {
+    // Caso base: se V for NULL, não há nada para liberar
+    if (V == NULL) 
+        return;
+    
+    // Libera recursivamente os clusters se existirem
+    if (V->clusters != NULL) {
+        for (uint32_t i = 0; i < V->clusters->tam; i++) {
+            if (V->clusters->tabela[i].chave != -1 && V->clusters->tabela[i].ativo)
+                LiberarVEB(V->clusters->tabela[i].valor);
+        }
+
+        free(V->clusters->tabela);
+        free(V->clusters);
+    }
+    
+    // Libera recursivamente o resumo se existir
+    if (V->resumo != NULL)
+        LiberarVEB(V->resumo);
+
+    free(V);
+}
+
 // Função auxiliar para dividir x em <c, ...>
 uint32_t get_c(uint32_t x, uint32_t w) { return x >> (w >> 1); };
 // Função auxiliar para dividir x em <..., i>
-uint32_t get_i(uint32_t x, uint32_t w) { return x & ((1 << (w >> 1)) - 1); };
+uint32_t get_i(uint32_t x, uint32_t w) { return x & ((1U << (w >> 1)) - 1); };
 
 // Função para combinar <c, i> em x
 uint32_t tupla(uint32_t c, uint32_t i, uint32_t w) { return (c << (w >> 1)) | i; };
 
 // Retorna true se encontrou sucessor, false caso contrário
-bool Sucessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
+bool SucessorVEB(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
     if (V->vazio)
         return false; 
 
     // Caso base (não estava no pseudo-código)
     if (w == 1) {
-        if (x == V->min && x != V->max) {
+        if (x < V->max) {
             *saida = V->max; return true;
         }
 
@@ -215,14 +242,14 @@ bool Sucessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
     if (EncontrarChave(V->clusters, c, &cluster) != -1) { // Encontra o cluster de c
         if (i < cluster->valor->max) {
             uint32_t suc;
-            bool has_suc = Sucessor(cluster->valor, i, w >> 1, &suc);
+            bool has_suc = SucessorVEB(cluster->valor, i, w >> 1, &suc);
             *saida = tupla(c, suc, w); return has_suc;
         }
     }
 
     if (V->resumo != NULL) {
         uint32_t c_;
-        if (Sucessor(V->resumo, c, w >> 1, &c_)) {
+        if (SucessorVEB(V->resumo, c, w >> 1, &c_)) {
             cluster = NULL;
             EncontrarChave(V->clusters, c_, &cluster);
     
@@ -234,7 +261,7 @@ bool Sucessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
 }
 
 // Retorna true se encontrou predecessor, false caso contrário
-bool Predecessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
+bool PredecessorVEB(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
     if (V->vazio)
         return false;
 
@@ -260,7 +287,7 @@ bool Predecessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
     if (EncontrarChave(V->clusters, c, &cluster) != -1) {
         if (i > cluster->valor->min) {
             uint32_t pre;
-            bool has_pre = Predecessor(cluster->valor, i, w >> 1, &pre);
+            bool has_pre = PredecessorVEB(cluster->valor, i, w >> 1, &pre);
 
             *saida = tupla(c, pre, w); return has_pre;
         }
@@ -268,7 +295,7 @@ bool Predecessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
 
     if (V->resumo != NULL) {
         uint32_t c_;
-        bool has_pre = Predecessor(V->resumo, c, w >> 1, &c_);
+        bool has_pre = PredecessorVEB(V->resumo, c, w >> 1, &c_);
         if (has_pre) {
             cluster = NULL;
             EncontrarChave(V->clusters, c_, &cluster);
@@ -284,7 +311,7 @@ bool Predecessor(vEB* V, uint32_t x, uint32_t w, uint32_t *saida) {
     return false;
 }
 
-void Incluir(vEB* V, uint32_t x, uint32_t w) {
+void IncluirVEB(vEB* V, uint32_t x, uint32_t w) {
     // Não estava no pseudo-código
     if (!V->vazio) {
         // Se x já está presente, não faz nada
@@ -318,23 +345,23 @@ void Incluir(vEB* V, uint32_t x, uint32_t w) {
         // Adiciona a chave c na tabela de clusters se ainda não existir
         No* cluster = NULL;
         if (EncontrarChave(V->clusters, c, &cluster) == -1) {
-            IncluirChave(V->clusters, c, Iniciar(w >> 1));
+            IncluirChave(V->clusters, c, AlocarVEB(w >> 1));
             EncontrarChave(V->clusters, c, &cluster);
         }
 
         if (cluster->valor->vazio) { // "se V->cluster[c]->min == NULO" no pseudo-código
             if (V->resumo == NULL)
-                V->resumo = Iniciar(w >> 1);
+                V->resumo = AlocarVEB(w >> 1);
             
-            Incluir(V->resumo, c, w >> 1);
+            IncluirVEB(V->resumo, c, w >> 1);
         }
 
-        Incluir(cluster->valor, i, w >> 1);
+        IncluirVEB(cluster->valor, i, w >> 1);
     
     }
 }
 
-void Remover(vEB* V, uint32_t x, uint32_t w) {
+void RemoverVEB(vEB* V, uint32_t x, uint32_t w) {
     // Se a árvore estiver vazia, não faz nada (não estava no pseudo-código)
     if (V->vazio) 
         return;
@@ -370,13 +397,14 @@ void Remover(vEB* V, uint32_t x, uint32_t w) {
 
     No* cluster = NULL;
     if (EncontrarChave(V->clusters, c, &cluster) != -1) {
-        Remover(cluster->valor, i, w >> 1);
+        RemoverVEB(cluster->valor, i, w >> 1);
 
         if (cluster->valor->vazio) {
+            LiberarVEB(cluster->valor);
             DeletarChave(V->clusters, c);
 
             if (V->resumo != NULL)
-                Remover(V->resumo, c, w >> 1);
+                RemoverVEB(V->resumo, c, w >> 1);
         }
 
         if (V->resumo == NULL || V->resumo->vazio) { // "se V->resumo->min == NULO" no pseudo-código
@@ -393,36 +421,31 @@ void Remover(vEB* V, uint32_t x, uint32_t w) {
     }
 }
 
-void Imprimir(vEB* V, uint32_t w) {
+// Função para imprimir os elementos da árvore van Emde Boas
+void ImprimirVEB(vEB* V, uint32_t w) {
     // Caso a árvore esteja vazia, não imprime nada
-    if (V->vazio)
+    if (V->vazio) {
+        printf("\n"); // Linha nova se não houver nada para imprimir
         return;
+    }
 
     printf("Min: %u", V->min);
 
     if (V->resumo != NULL && !V->resumo->vazio) {
-        uint32_t c = V->resumo->min;
+        uint32_t c = V->resumo->min, curr;
 
         while (true) {
             No* cluster = NULL;
             EncontrarChave(V->clusters, c, &cluster);
             
-            if (cluster != NULL && cluster->valor != NULL && !cluster->valor->vazio) {
-                uint32_t curr = cluster->valor->min;
-                printf(", C[%u]: %u", c, curr);
-                
-                uint32_t suc;
-                bool has_sucessor = Sucessor(cluster->valor, curr, w >> 1, &suc);
-
-                while (has_sucessor) {
-                    printf(", %u", suc);
-                    has_sucessor = Sucessor(cluster->valor, suc, w >> 1, &suc);
-                }
-            }
-
-            if (!Sucessor(V->resumo, c, w >> 1, &c)) {
+            curr = cluster->valor->min;
+            printf(", C[%u]: %u", c, curr);
+            
+            while (SucessorVEB(cluster->valor, curr, w >> 1, &curr))
+                printf(", %u", curr);
+        
+            if (!SucessorVEB(V->resumo, c, w >> 1, &c))
                 break;
-            }
         }
     }
 
@@ -443,19 +466,19 @@ int main(int argc, char *argv[]) {
     }
 
     srand(time(NULL));
-    vEB* V = Iniciar(W);
+    vEB* V = AlocarVEB(W);
 
     char tag[4]; uint32_t a;
     while (fscanf(arquivo, "%s %u", tag, &a) >= 1) { // a será opcional
         if (strcmp(tag, "INC") == 0) {
-            Incluir(V, a, W);
+            IncluirVEB(V, a, W);
         } else if (strcmp(tag, "REM") == 0) {
-            Remover(V, a, W);
+            RemoverVEB(V, a, W);
         } else if (strcmp(tag, "SUC") == 0) {
             printf("SUC %u\n", a);
 
             uint32_t suc;
-            if (Sucessor(V, a, W, &suc)) {
+            if (SucessorVEB(V, a, W, &suc)) {
                 printf("%u\n", suc);
             } else {
                 printf("+INF\n");
@@ -464,7 +487,7 @@ int main(int argc, char *argv[]) {
             printf("PRE %u\n", a);
 
             uint32_t pre;
-            if (Predecessor(V, a, W, &pre)) {
+            if (PredecessorVEB(V, a, W, &pre)) {
                 printf("%u\n", pre);
             } else {
                 printf("-INF\n");
@@ -472,7 +495,7 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(tag, "IMP") == 0) {
             printf("IMP\n");
             
-            Imprimir(V, W);
+            ImprimirVEB(V, W);
         } else {
             // fprintf(stderr, "Tag inválida: %s\n", tag);
             // return 1;
