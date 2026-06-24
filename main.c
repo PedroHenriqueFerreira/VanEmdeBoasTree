@@ -7,7 +7,7 @@
 
 // Constantes
 #define INITIAL_TABLE_SIZE 4 // Tamanho inicial da tabela hash
-#define P 65537 // Número primo para a função de hash (maior que 2^16)
+#define P 65537 // Número primo para a função de hash (maior que 2^16 = quantidade máxima de clusters)
 #define W 32 // Número de bits para o universo (2^32)
 
 typedef struct van_emde_boas vEB;
