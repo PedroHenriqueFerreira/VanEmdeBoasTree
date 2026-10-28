@@ -4,14 +4,7 @@ Este repositório contém a implementação de uma Árvore van Emde Boas. A estr
 
 ---
 
-## 1. Dados da Aluna
-
-* **Nome:** DENISE RÍSIA ANDRADE CARVALHO
-* **Matrícula:** 603124
-
----
-
-## 2. Linguagem de Programação Usada
+## 1. Linguagem de Programação Usada
 
 * **Linguagem:** C
 * **Versão utilizada:** GCC 15.2.0
@@ -19,7 +12,7 @@ Este repositório contém a implementação de uma Árvore van Emde Boas. A estr
 
 ---
 
-## 3. Como rodar o seu programa
+## 2. Como rodar o seu programa
 
 O projeto inclui um `makefile` para automatizar e facilitar a compilação e execução. O programa lê os comandos a partir de um arquivo de texto (`.txt`).
 
@@ -54,7 +47,7 @@ Para compilar e executar manualmente, execute:
 
 ---
 
-## 4. Descrição das Funções e Estruturas
+## 3. Descrição das Funções e Estruturas
 
 A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória em espaço linear utilizando uma tabela de dispersão interna em cada nível para armazenar apenas os clusters não vazios.
 
@@ -90,7 +83,7 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória e
 
 ---
 
-## 5. Escolhas Arquiteturais
+## 4. Escolhas Arquiteturais
 
 * **Alocação Contígua (`No*`):** A tabela hash utiliza um vetor direto de estruturas em vez de um vetor de ponteiros (`No`). Isso garante que os nós fiquem vizinhos na memória, maximizando a localidade de cache da CPU durante a sondagem linear e agilizando a liberação de memória com um único `free`.
 * **Hash 5-Independente ($P = 65537$):** O uso de um polinômio de grau 4 garante o caos matemático necessário para mitigar o problema de agrupamentos da sondagem linear, assegurando tempo médio constante. O primo foi ajustado para ser maior que 65536, evitando colisões matemáticas prematuras no mapeamento dos clusters.
@@ -99,7 +92,7 @@ A árvore van Emde Boas foi implementada de forma a otimizar o uso de memória e
 
 ---
 
-## 6. Arquivos onde as estruturas e funções se encontram
+## 5. Arquivos onde as estruturas e funções se encontram
 
 Para simplificar a compilação e evitar dependências complexas em sistemas de teste, o código-fonte foi centralizado:
 
